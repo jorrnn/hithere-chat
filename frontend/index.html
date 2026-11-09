@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f7fb">
+  <title>HiThere — conversations that feel closer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main id="authView" class="auth-shell">
+    <section class="auth-brand">  
+      <div class="brand-mark">H<span>.</span></div>
+      <p class="eyebrow">A little closer, wherever you are.</p>
+      <h1>Good conversations<br><em>start here.</em></h1>
+      <p class="brand-copy">A calmer space for the people and conversations that matter.</p>
+      <div class="brand-orbit"><div class="orbit-dot dot-one"></div><div class="orbit-dot dot-two"></div><div class="orbit-dot dot-three"></div><span>hi</span></div>
+      <small>HiThere · Make room for connection</small>
+    </section>
+    <section class="auth-panel">
+      <div class="auth-top"><span class="brand-word">HiThere<span>.</span></span><span class="quiet">Your space to connect</span></div>
+      <div class="auth-card">
+        <div class="auth-heading"><p class="eyebrow" id="authEyebrow">WELCOME BACK</p><h2 id="authTitle">Sign in</h2><p id="authSubtitle">Pick up right where you left off.</p></div>
+        <form id="authForm">
+          <div id="nameField" class="field hidden"><label for="displayName">Your name</label><input id="displayName" autocomplete="name" placeholder="e.g. Jordan Lee"></div>
+          <div id="usernameField" class="field hidden"><label for="username">Username</label><input id="username" autocomplete="username" placeholder="e.g. jordan_lee"></div>
+          <div class="field"><label for="loginEmail" id="emailLabel">Email or username</label><input id="loginEmail" autocomplete="username" placeholder="you@example.com" required></div>
+          <div class="field"><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" placeholder="At least 8 characters" required minlength="8"></div>
+          <p class="form-error" id="authError" role="alert"></p>
+          <button class="primary-btn full" id="authSubmit" type="submit">Sign in <span>→</span></button>
+        </form>
+        <p class="switch-auth" id="switchText">New to HiThere? <button id="switchAuth" type="button">Create an account</button></p>
+      </div>
+      <p class="auth-foot">By continuing, you agree to keep this a kind and respectful space.</p>
+    </section>
+  </main>
+
+  <main id="appView" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="side-brand"><div class="brand-mark small">h<span>.</span></div><span>HiThere<span class="brand-period">.</span></span></div>
+      <div class="side-user">
+  <div class="avatar" id="myAvatar">H</div>
+  <div class="side-user-info">
+    <strong id="myName">Your profile</strong>
+    <small id="myHandle">@username</small>
+  </div>
+  <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button>
+  <button class="icon-btn" id="logoutBtn" title="Sign out">↗</button>
+</div>
+      <div class="side-section-label">YOUR SPACE <button id="newChatBtn" class="new-chat" title="Start a conversation">+</button></div>
+      <div class="search-wrap"><span>⌕</span><input id="chatSearch" placeholder="Find a conversation"></div>
+      <div id="conversationList" class="conversation-list"><div class="empty-side">Your conversations will appear here.</div></div>
+      <div class="sidebar-bottom"><span class="status-pulse"></span><span>All caught up</span><span class="version">BETA</span></div>
+    </aside>
+
+    <section class="chat-area">
+      <header class="chat-header">
+  <div class="mobile-brand">
+    <span class="brand-word">HiThere<span>.</span></span>
+  </div>
+
+  <button type="button" class="back-to-chats" id="backToChats" aria-label="Back to chats">
+    ←
+  </button>
+
+  <div id="activeChatHead" class="active-chat-head">
+    <div class="avatar muted-avatar">✳</div>
+    <div class="chat-user-info">
+      <strong>Your conversations</strong>
+      <small>Choose someone to say hello</small>
+    </div>
+  </div>
+
+  <div class="header-actions">
+    <button class="icon-btn" id="detailsBtn" title="Conversation details">ⓘ</button>
+  </div>
+</header>
+      <section id="welcomePanel" class="welcome-panel">
+        <div class="welcome-art"><div class="welcome-ring ring-a"></div><div class="welcome-ring ring-b"></div><div class="welcome-center">h<span>.</span></div><span class="float-bubble bubble-a">hello!</span><span class="float-bubble bubble-b">✦</span><span class="float-bubble bubble-c">☺</span></div>
+        <p class="eyebrow">A SPACE FOR YOUR PEOPLE</p><h1>Every good thing<br>starts with <em>hello.</em></h1><p>Find a friend, start a conversation, and make someone's day a little brighter.</p>
+        <button class="primary-btn" id="welcomeNewChat">Start a conversation <span>→</span></button>
+      </section>
+      <section id="messagePanel" class="message-panel hidden">
+        <div id="messages" class="messages"></div>
+        <form id="messageForm" class="composer">
+          <button type="button" class="composer-plus" title="Attachments coming later" aria-label="Attachments">＋</button>
+          <input id="messageInput" maxlength="4000" placeholder="Write a message..." autocomplete="off">
+          <span class="composer-hint">Enter to send</span>
+          <button class="send-btn" type="submit" aria-label="Send message">↑</button>
+        </form>
+      </section>
+    </section>
+
+    <aside id="detailsPanel" class="details-panel">
+      <div class="details-top"><span>CONVERSATION</span><button class="icon-btn" id="closeDetails">×</button></div>
+      <div id="detailsContent" class="details-content"><div class="detail-placeholder">Your conversation details will appear here.</div></div>
+      <div class="details-note"><span>✦</span><p>Good conversations make ordinary moments meaningful.</p></div>
+    </aside>
+
+    <nav class="bottom-nav">
+      <button type="button" class="bottom-nav-item active" id="navChats">
+        <span class="nav-icon">▤</span>
+        <span>Chats</span>
+      </button>
+
+      <button type="button" class="bottom-nav-item" id="navSearch">
+        <span class="nav-icon">⌕</span>
+        <span>Search</span>
+      </button>
+
+      <button type="button" class="bottom-nav-item" id="navNewChat">
+        <span class="nav-icon">＋</span>
+        <span>New chat</span>
+      </button>
+
+      <button type="button" class="bottom-nav-item" id="navSettings">
+        <span class="nav-icon">⚙</span>
+        <span>Settings</span>
+      </button>
+    </nav>
+
+    <!-- SETTINGS PAGE -->
+<section id="settingsView" class="settings-view hidden">
+
+  <header class="settings-header">
+    <div>
+      <p class="eyebrow">YOUR PERSONAL SPACE</p>
+      <h1>Settings</h1>
+      <p>Manage your account and customise your HiThere experience.</p>
+    </div>
+    <button type="button" id="closeSettings" class="settings-close">×</button>
+  </header>
+
+  <div class="settings-layout">
+
+    <!-- SETTINGS NAVIGATION -->
+    <aside class="settings-menu">
+      <button class="settings-tab active" data-setting="profile">
+        <span>♙</span> Profile
+      </button>
+      <button class="settings-tab" data-setting="appearance">
+        <span>◐</span> Appearance
+      </button>
+      <button class="settings-tab" data-setting="notifications">
+        <span>♧</span> Notifications
+      </button>
+      <button class="settings-tab" data-setting="privacy">
+        <span>♢</span> Privacy & Security
+      </button>
+      <button class="settings-tab" data-setting="about">
+        <span>ⓘ</span> About HiThere
+      </button>
+    </aside>
+
+    <!-- SETTINGS CONTENT -->
+    <div class="settings-content">
+
+      <!-- PROFILE -->
+      <section class="settings-panel active" id="setting-profile">
+        <div class="settings-section-heading">
+          <h2>Profile settings</h2>
+          <p>Manage how other people see you on HiThere.</p>
+        </div>
+
+        <div class="settings-profile-card">
+          <div class="avatar settings-avatar" id="settingsAvatar">H</div>
+          <div>
+            <strong id="settingsProfileName">Your name</strong>
+            <p id="settingsProfileHandle">@username</p>
+          </div>
+        </div>
+
+        <form id="profileSettingsForm" class="settings-form">
+          <label>
+            Display name
+            <input id="settingsDisplayName" maxlength="60" required>
+          </label>
+
+          <label>
+            Username
+            <input id="settingsUsername" maxlength="24" required>
+          </label>
+
+          <label>
+            Avatar colour
+            <select id="settingsAvatarColor">
+              <option value="#7868e6">Violet</option>
+              <option value="#e58b65">Coral</option>
+              <option value="#3d9b86">Teal</option>
+              <option value="#d16c91">Rose</option>
+              <option value="#5788c7">Blue</option>
+            </select>
+          </label>
+
+          <button type="submit" class="primary-btn">Save profile changes</button>
+          <p id="profileSettingsMessage" class="settings-message"></p>
+        </form>
+      </section>
+
+      <!-- APPEARANCE -->
+      <section class="settings-panel" id="setting-appearance">
+        <div class="settings-section-heading">
+          <h2>Appearance</h2>
+          <p>Make HiThere feel more like your space.</p>
+        </div>
+
+        <div class="settings-option">
+          <div>
+            <strong>Theme</strong>
+            <p>Choose how HiThere looks on your device.</p>
+          </div>
+          <select id="settingsTheme">
+            <option value="light">Light mode</option>
+            <option value="dark">Dark mode</option>
+          </select>
+        </div>
+
+        <div class="settings-option">
+          <div>
+            <strong>Chat wallpaper</strong>
+            <p>Choose a background for your conversations.</p>
+          </div>
+          <select id="settingsWallpaper">
+            <option value="default">Default</option>
+            <option value="lavender">Soft lavender</option>
+            <option value="cream">Warm cream</option>
+            <option value="mint">Fresh mint</option>
+          </select>
+        </div>
+      </section>
+
+      <!-- NOTIFICATIONS -->
+      <section class="settings-panel" id="setting-notifications">
+        <div class="settings-section-heading">
+          <h2>Notifications</h2>
+          <p>Control how HiThere keeps you informed.</p>
+        </div>
+
+        <div class="settings-option">
+          <div>
+            <strong>Message notifications</strong>
+            <p>Receive browser notifications for new messages.</p>
+          </div>
+          <input type="checkbox" id="settingsNotifications">
+        </div>
+
+        <div class="settings-option">
+          <div>
+            <strong>Notification sounds</strong>
+            <p>Play a sound when a new message arrives.</p>
+          </div>
+          <input type="checkbox" id="settingsSound">
+        </div>
+      </section>
+
+      <!-- PRIVACY -->
+      <section class="settings-panel" id="setting-privacy">
+        <div class="settings-section-heading">
+          <h2>Privacy & Security</h2>
+          <p>Manage your visibility and account security.</p>
+        </div>
+
+        <div class="settings-option">
+          <div>
+            <strong>Online status</strong>
+            <p>Allow other people to see when you're online.</p>
+          </div>
+          <input type="checkbox" id="settingsOnlineStatus">
+        </div>
+
+        <div class="settings-security-card">
+          <div>
+            <strong>Change password</strong>
+            <p>Update your account password.</p>
+          </div>
+          <button type="button" id="openPasswordForm" class="secondary-btn">Change password</button>
+        </div>
+
+        <form id="passwordSettingsForm" class="settings-form hidden">
+          <label>
+            Current password
+            <input id="currentPassword" type="password" autocomplete="current-password" required>
+          </label>
+          <label>
+            New password
+            <input id="newPassword" type="password" minlength="8" autocomplete="new-password" required>
+          </label>
+          <label>
+            Confirm new password
+            <input id="confirmPassword" type="password" minlength="8" autocomplete="new-password" required>
+          </label>
+          <button type="submit" class="primary-btn">Update password</button>
+          <p id="passwordSettingsMessage" class="settings-message"></p>
+        </form>
+      </section>
+
+      <!-- ABOUT -->
+      <section class="settings-panel" id="setting-about">
+        <div class="settings-section-heading">
+          <h2>About HiThere</h2>
+          <p>A little closer, wherever you are.</p>
+        </div>
+
+        <div class="about-settings-card">
+          <div class="about-logo">h<span>.</span></div>
+          <h2>HiThere</h2>
+          <p>Make room for connection.</p>
+          <span class="version-label">VERSION 1.0 · BETA</span>
+        </div>
+
+        <div class="settings-security-card">
+          <div>
+            <strong>Need help?</strong>
+            <p>We're here to help you enjoy your conversations.</p>
+          </div>
+          <span class="secondary-btn">Help centre coming soon</span>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</section>
+<!-- END SETTINGS PAGE -->
+  </main>
+
+  <div id="searchModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-backdrop" data-close="true"></div>
+    <section class="modal-card"><button class="modal-close" id="closeModal">×</button><p class="eyebrow">MAKE A CONNECTION</p><h2 id="modalTitle">Who would you like to talk to?</h2><p class="modal-sub">Search by name or username to start a private conversation.</p>
+      <div class="search-wrap modal-search"><span>⌕</span><input id="userSearch" placeholder="Search people..." autocomplete="off"></div>
+      <div id="userResults" class="user-results"><p class="search-prompt">Type at least 2 characters to find people.</p></div>
+    </section>
+  </div>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
