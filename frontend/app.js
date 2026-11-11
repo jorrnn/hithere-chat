@@ -66,36 +66,71 @@ async function enterApp(user) {
     toast("Live connection interrupted. Refresh if messages stop updating.");
   });
 
-  state.socket.on("message:new", message => {
-    const conversationId = Number(message.conversation_id);
-    const isActiveConversation =
-      conversationId === Number(state.activeId);
+  
+state.socket.on("message:new", message => {
+  const conversationId = Number(message.conversation_id);
+  const isActiveConversation =
+    conversationId === Number(state.activeId);
 
-    if (isActiveConversation) {
-      appendMessage(message);
+  const isOwnMessage =
+    Number(message.sender_id) === Number(state.user.id);
+
+  // Update the conversation preview and move it to the top.
+  const conversation = state.conversations.find(
+    c => Number(c.id) === conversationId
+  );
+
+  if (conversation) {
+    conversation.last_message = message.body;
+    conversation.last_message_at =
+      message.created_at || new Date().toISOString();
+
+    // Count unread messages only when the conversation is not open.
+    if (!isOwnMessage && !isActiveConversation) {
+      conversation.unread_count =
+        Number(conversation.unread_count || 0) + 1;
     }
 
-    if (Number(message.sender_id) !== Number(state.user.id)) {
-      state.socket.emit("message:delivered", {
+    state.conversations.sort((a, b) =>
+      new Date(b.last_message_at || 0) -
+      new Date(a.last_message_at || 0)
+    );
+
+    renderConversations();
+  }
+
+  if (isActiveConversation) {
+    appendMessage(message);
+  }
+
+  if (!isOwnMessage) {
+    state.socket.emit("message:delivered", {
+      messageId: message.id
+    });
+
+    if (isActiveConversation && !document.hidden) {
+      state.socket.emit("message:read", {
         messageId: message.id
       });
-
-      if (!notificationPreferences.notificationsEnabled) return;
-      if (isActiveConversation && !document.hidden) return;
-
-      if ("Notification" in window && Notification.permission === "granted") {
-        new Notification(message.sender_name || "New message", {
-          body: message.body,
-          icon: "/favicon.ico"
-        });
-      }
-
-      if (notificationPreferences.notificationSound) {
-        const audio = new Audio("/notification.mp3");
-        audio.play().catch(() => {});
-      }
     }
-  });
+
+    if (!notificationPreferences.notificationsEnabled) return;
+    if (isActiveConversation && !document.hidden) return;
+
+    if ("Notification" in window &&
+        Notification.permission === "granted") {
+      new Notification(message.sender_name || "New message", {
+        body: message.body,
+        icon: "/favicon.ico"
+      });
+    }
+
+    if (notificationPreferences.notificationSound) {
+      const audio = new Audio("/notification.mp3");
+      audio.play().catch(() => {});
+    }
+  }
+});
 
   state.socket.on("conversation:updated", () => {
     loadConversations();
@@ -162,30 +197,52 @@ async function loadConversations() {
   }
 }
 function conversationName(c) { return c.is_group?c.title:(c.other_user?.displayName || "Conversation"); }
+
 function renderConversations() {
-  const query=$("#chatSearch").value.trim().toLowerCase();
-  const items=state.conversations.filter(c=>conversationName(c).toLowerCase().includes(query)||(c.other_user?.username||"").includes(query));
-  $("#conversationList").innerHTML=items.length?items.map(c=>{
-    const u=c.other_user||{}; const name=conversationName(c);
-    const online = u.id && !c.is_group && isUserOnline(u.id);
+  const query = $("#chatSearch").value.trim().toLowerCase();
 
-return `<div class="conversation-item ${Number(c.id)===Number(state.activeId)?"active":""}" data-id="${c.id}">
-  <div class="avatar-presence">
-    <div class="avatar" style="background:${escapeHtml(u.avatarColor||"#7868e6")}">
-      ${escapeHtml(initials(name))}
-    </div>
-    ${u.id && !c.is_group
-      ? `<span class="presence-dot ${online ? "online" : "offline"}"></span>`
-      : ""}
-  </div>
-  <div class="conversation-meta">
-    <strong>${escapeHtml(name)}</strong>
-    <small>${escapeHtml(c.last_message||"Say hello 👋")}</small>
-  </div>
-</div>`;
+  const items = state.conversations.filter(c =>
+    conversationName(c).toLowerCase().includes(query) ||
+    (c.other_user?.username || "").includes(query)
+  );
 
-  }).join(""):'<div class="empty-side">No conversations yet. Start one with the + button.</div>';
-  document.querySelectorAll(".conversation-item").forEach(el=>el.addEventListener("click",()=>openConversation(Number(el.dataset.id))));
+  $("#conversationList").innerHTML = items.length
+    ? items.map(c => {
+        const u = c.other_user || {};
+        const name = conversationName(c);
+        const online = u.id && !c.is_group && isUserOnline(u.id);
+        const unread = Number(c.unread_count || 0);
+
+        return `
+          <div class="conversation-item ${Number(c.id) === Number(state.activeId) ? "active" : ""} ${unread > 0 ? "unread" : ""}" data-id="${c.id}">
+            <div class="avatar-presence">
+              <div class="avatar" style="background:${escapeHtml(u.avatarColor || "#7868e6")}">
+                ${escapeHtml(initials(name))}
+              </div>
+
+              ${u.id && !c.is_group
+                ? `<span class="presence-dot ${online ? "online" : "offline"}"></span>`
+                : ""}
+            </div>
+
+            <div class="conversation-meta">
+              <strong>${escapeHtml(name)}</strong>
+              <small>${escapeHtml(c.last_message || "Say hello 👋")}</small>
+            </div>
+
+            ${unread > 0
+              ? `<span class="unread-badge">${unread > 99 ? "99+" : unread}</span>`
+              : ""}
+          </div>
+        `;
+      }).join("")
+    : '<div class="empty-side">No conversations yet. Start one with the + button.</div>';
+
+  document.querySelectorAll(".conversation-item").forEach(el => {
+    el.addEventListener("click", () =>
+      openConversation(Number(el.dataset.id))
+    );
+  });
 }
 
 function isUserOnline(userId) {
@@ -234,7 +291,8 @@ async function openConversation(id) {
   const data=await api(`/api/conversations/${id}/messages`);
   if(state.activeId!==id)return;
   $("#messages").innerHTML="";
- data.messages.forEach(message => {
+ 
+data.messages.forEach(message => {
   appendMessage(message);
 
   // Mark messages from other users as read.
@@ -244,6 +302,11 @@ async function openConversation(id) {
     });
   }
 });
+
+// Clear the unread badge immediately.
+c.unread_count = 0;
+renderConversations();
+
 
 $("#messages").scrollTop = $("#messages").scrollHeight;
   $("#messageInput").focus();

@@ -422,19 +422,57 @@ app.get("/api/users/search", requireAuth, async (req, res) => {
   res.json({ users: result.rows.map(cleanUser) });
 });
 
+
 app.get("/api/conversations", requireAuth, async (req, res) => {
   const result = await pool.query(`
     SELECT c.id, c.is_group, c.title,
-      (SELECT json_build_object('id', u.id, 'username', u.username,
-        'displayName', u.display_name, 'avatarColor', u.avatar_color)
-       FROM conversation_members cm2 JOIN users u ON u.id=cm2.user_id
-       WHERE cm2.conversation_id=c.id AND cm2.user_id <> $1 LIMIT 1) AS other_user,
-      (SELECT m.body FROM messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message,
-      (SELECT m.created_at FROM messages m WHERE m.conversation_id=c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_at
+
+      (SELECT json_build_object(
+        'id', u.id,
+        'username', u.username,
+        'displayName', u.display_name,
+        'avatarColor', u.avatar_color
+      )
+       FROM conversation_members cm2
+       JOIN users u ON u.id = cm2.user_id
+       WHERE cm2.conversation_id = c.id
+         AND cm2.user_id <> $1
+       LIMIT 1) AS other_user,
+
+      (SELECT m.body
+       FROM messages m
+       WHERE m.conversation_id = c.id
+       ORDER BY m.created_at DESC
+       LIMIT 1) AS last_message,
+
+      (SELECT m.created_at
+       FROM messages m
+       WHERE m.conversation_id = c.id
+       ORDER BY m.created_at DESC
+       LIMIT 1) AS last_message_at,
+
+      (SELECT COUNT(*)
+       FROM messages m
+       JOIN message_receipts mr ON mr.message_id = m.id
+       WHERE m.conversation_id = c.id
+         AND mr.user_id = $1
+         AND m.sender_id <> $1
+         AND mr.read_at IS NULL
+      ) AS unread_count
+
     FROM conversations c
-    JOIN conversation_members mine ON mine.conversation_id=c.id AND mine.user_id=$1
-    ORDER BY COALESCE((SELECT MAX(created_at) FROM messages WHERE conversation_id=c.id), c.created_at) DESC
+    JOIN conversation_members mine
+      ON mine.conversation_id = c.id
+     AND mine.user_id = $1
+
+    ORDER BY COALESCE(
+      (SELECT MAX(created_at)
+       FROM messages
+       WHERE conversation_id = c.id),
+      c.created_at
+    ) DESC
   `, [req.session.userId]);
+
   res.json({ conversations: result.rows });
 });
 
