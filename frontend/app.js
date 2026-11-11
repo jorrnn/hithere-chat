@@ -38,93 +38,122 @@ $("#authForm").addEventListener("submit", async (event)=>{
     await enterApp(result.user);
   } catch(err) { $("#authError").textContent=err.message; }
 });
+
 async function enterApp(user) {
-  state.user=user; $("#authView").classList.add("hidden"); $("#appView").classList.remove("hidden");
-  $("#myName").textContent=user.displayName; $("#myHandle").textContent="@"+user.username;
-  $("#myAvatar").textContent=initials(user.displayName); $("#myAvatar").style.background=user.avatarColor;
-  state.socket=io();
+  state.user = user;
+
+  $("#authView").classList.add("hidden");
+  $("#appView").classList.remove("hidden");
+
+  $("#myName").textContent = user.displayName;
+  $("#myHandle").textContent = "@" + user.username;
+  $("#myAvatar").textContent = initials(user.displayName);
+  $("#myAvatar").style.background = user.avatarColor;
+
+  state.socket = io();
+
   state.socket.on("presence:list", userIds => {
-  state.online = new Set(userIds.map(Number));
-  renderConversations();
+    state.online = new Set(userIds.map(Number));
+    renderConversations();
 
-  if (state.activeUser) {
-    renderActiveHeader();
-    renderDetails();
-  }
-});
+    if (state.activeUser) {
+      renderActiveHeader();
+      renderDetails();
+    }
+  });
 
-  state.socket.on("connect_error",()=>toast("Live connection interrupted. Refresh if messages stop updating."));
+  state.socket.on("connect_error", () => {
+    toast("Live connection interrupted. Refresh if messages stop updating.");
+  });
+
   state.socket.on("message:new", message => {
-  const conversationId = Number(message.conversation_id);
-  const isActiveConversation =
-    conversationId === Number(state.activeId);
+    const conversationId = Number(message.conversation_id);
+    const isActiveConversation =
+      conversationId === Number(state.activeId);
 
-  // Display the message if its conversation is open.
-  if (isActiveConversation) {
-    appendMessage(message);
-  }
+    if (isActiveConversation) {
+      appendMessage(message);
+    }
 
-  // Acknowledge delivery to the server.
-  if (Number(message.sender_id) !== Number(state.user.id)) {
-    state.socket.emit("message:delivered", {
-      messageId: message.id
-    });
-  }
+    if (Number(message.sender_id) !== Number(state.user.id)) {
+      state.socket.emit("message:delivered", {
+        messageId: message.id
+      });
 
-  // Don't notify users about their own messages.
-  if (Number(message.sender_id) === Number(state.user.id)) {
-    return;
-  }
+      if (!notificationPreferences.notificationsEnabled) return;
+      if (isActiveConversation && !document.hidden) return;
 
-  // Check saved notification preferences.
-  if (!notificationPreferences.notificationsEnabled) {
-    return;
-  }
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification(message.sender_name || "New message", {
+          body: message.body,
+          icon: "/favicon.ico"
+        });
+      }
 
-  // Don't notify if the user is already viewing this conversation.
-  if (isActiveConversation && !document.hidden) {
-    return;
-  }
+      if (notificationPreferences.notificationSound) {
+        const audio = new Audio("/notification.mp3");
+        audio.play().catch(() => {});
+      }
+    }
+  });
 
-  // Browser notification.
-  if ("Notification" in window && Notification.permission === "granted") {
-    new Notification(message.sender_name || "New message", {
-      body: message.body,
-      icon: "/favicon.ico"
-    });
-  }
+  state.socket.on("conversation:updated", () => {
+    loadConversations();
+  });
 
-  // Notification sound.
-  if (notificationPreferences.notificationSound) {
-    const audio = new Audio("/notification.mp3");
-    audio.play().catch(() => {});
-  }
-});
-  state.socket.on("conversation:updated",()=>loadConversations());
   state.socket.on("presence:update", event => {
-  const userId = Number(event.userId);
+    const userId = Number(event.userId);
 
-  if (event.online === true) {
-    state.online.add(userId);
-  } else {
-    state.online.delete(userId);
-  }
+    if (event.online === true) {
+      state.online.add(userId);
+    } else {
+      state.online.delete(userId);
+    }
 
-  renderConversations();
+    renderConversations();
 
-  if (
-    state.activeUser &&
-    Number(state.activeUser.id) === userId
-  ) {
-    renderActiveHeader();
-    renderDetails();
-  }
-});
+    if (
+      state.activeUser &&
+      Number(state.activeUser.id) === userId
+    ) {
+      renderActiveHeader();
+      renderDetails();
+    }
+  });
+
   await loadConversations();
-  await loadAppearanceSettings();
-  await loadNotificationSettings();
-  await loadPrivacySettings();
+
+  // Load the three settings using one request.
+  try {
+    const data = await api("/api/settings");
+    const settings = data.settings;
+
+    const theme = settings.theme || "light";
+    const wallpaper = settings.wallpaper || "default";
+
+    $("#settingsTheme").value = theme;
+    $("#settingsWallpaper").value = wallpaper;
+    applyAppearance(theme, wallpaper);
+
+    notificationPreferences = {
+      notificationsEnabled: settings.notifications_enabled,
+      notificationSound: settings.notification_sound
+    };
+
+    $("#settingsNotifications").checked =
+      notificationPreferences.notificationsEnabled;
+
+    $("#settingsSound").checked =
+      notificationPreferences.notificationSound;
+
+    $("#settingsOnlineStatus").checked =
+      settings.show_online_status;
+
+  } catch (error) {
+    console.error("Could not load user settings:", error);
+  }
 }
+
 async function loadConversations() {
   const data=await api("/api/conversations"); state.conversations=data.conversations;
   renderConversations();
@@ -263,10 +292,17 @@ function appendMessage(message) {
 $("#messageForm").addEventListener("submit",event=>{
   event.preventDefault(); const body=$("#messageInput").value.trim();
   if(!body||!state.activeId)return;
-  state.socket.emit("message:send",{conversationId:state.activeId,body},result=>{
-    if(!result?.ok)toast(result?.error||"Message could not be sent.");
-    else { $("#messageInput").value=""; loadConversations(); }
-  });
+  state.socket.emit("message:send", {
+  conversationId: state.activeId,
+  body
+}, result => {
+  if (!result?.ok) {
+    toast(result?.error || "Message could not be sent.");
+    return;
+  }
+
+  $("#messageInput").value = "";
+});
 });
 function renderDetails() {
   const u=state.activeUser; const c=state.conversations.find(x=>Number(x.id)===Number(state.activeId));

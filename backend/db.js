@@ -2,9 +2,20 @@ const { Pool } = require("pg");
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
+
+  ssl: {
+    rejectUnauthorized: false
+  },
+
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+  keepAlive: true
 });
 
+pool.on("error", (err) => {
+  console.error("Unexpected PostgreSQL pool error:", err.message);
+});
 
 async function initDb() {
   await pool.query(`
@@ -44,14 +55,14 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS messages_conversation_created_idx
       ON messages(conversation_id, created_at);
 
-      CREATE TABLE IF NOT EXISTS message_receipts (
-        id BIGSERIAL PRIMARY KEY,
-        message_id BIGINT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        delivered_at TIMESTAMPTZ,
-        read_at TIMESTAMPTZ,
-        UNIQUE (message_id, user_id)
-      );
+    CREATE TABLE IF NOT EXISTS message_receipts (
+      id BIGSERIAL PRIMARY KEY,
+      message_id BIGINT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      delivered_at TIMESTAMPTZ,
+      read_at TIMESTAMPTZ,
+      UNIQUE (message_id, user_id)
+    );
 
     CREATE TABLE IF NOT EXISTS user_settings (
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -64,7 +75,6 @@ async function initDb() {
     );
   `);
 
-  // Add delivery and read receipt columns safely.
   await pool.query(`
     ALTER TABLE messages
     ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;

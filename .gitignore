@@ -1,4 +1,7 @@
-node_modules/
 .env
+.env.local
+.env.*.local
+node_modules/
+.neon
 .DS_Store
 npm-debug.log*
