@@ -1359,3 +1359,13 @@ body * {
 .message-receipt.read {
   color: #3988e8;
 }
+
+/* Prevent Safari from zooming on mobile */
+input,
+textarea,
+select,
+#messageInput,
+#messageForm input,
+.message-input {
+  font-size: 16px !important;
+}
