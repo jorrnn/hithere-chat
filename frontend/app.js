@@ -415,9 +415,6 @@ $("#logoutBtn").addEventListener("click",async()=>{
   try{const data=await api("/api/me");if(data.user)await enterApp(data.user);}catch(err){console.error(err);}
 })();
 
-$("#backToChats").addEventListener("click", () => {
-  $("#appView").classList.remove("chat-open");
-});
 
 // Mobile bottom navigation
 $("#navChats")?.addEventListener("click", () => {
@@ -450,13 +447,23 @@ $("#navNewChat")?.addEventListener("click", () => {
   $("#navNewChat")?.classList.add("active");
 });
 
-// Back to conversations from an open chat
-$("#backToChats")?.addEventListener("click", () => {
-  $(".app-shell")?.classList.remove("chat-open");
 
+$("#backToChats")?.addEventListener("click", () => {
+  // Return to the conversations screen.
+  $("#appView")?.classList.remove("chat-open");
+
+  // Clear the active conversation.
+  state.activeId = null;
+  state.activeUser = null;
+
+  // Show the welcome screen.
   $("#messagePanel")?.classList.add("hidden");
   $("#welcomePanel")?.classList.remove("hidden");
+
+  // Refresh the conversation list.
+  renderConversations();
 });
+
 
 
 // ========================================
