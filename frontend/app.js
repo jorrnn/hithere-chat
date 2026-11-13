@@ -1,5 +1,5 @@
 const $ = (selector) => document.querySelector(selector);
-const state = { user: null, mode: "login", conversations: [], activeId: null, activeUser: null, socket: null, online: new Set() };
+const state = { user: null, mode: "login", conversations: [], activeId: null, activeUser: null, socket: null, online: new Set(), replyingTo: null };
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 const initials = (name) => String(name || "?").trim().split(/\s+/).slice(0,2).map(x=>x[0]).join("").toUpperCase();
 async function api(url, options = {}) {
@@ -55,6 +55,7 @@ async function enterApp(user) {
   state.socket.on("presence:list", userIds => {
     state.online = new Set(userIds.map(Number));
     renderConversations();
+    renderOnlinePeople();
 
     if (state.activeUser) {
       renderActiveHeader();
@@ -146,6 +147,7 @@ state.socket.on("message:new", message => {
     }
 
     renderConversations();
+    renderOnlinePeople();
 
     if (
       state.activeUser &&
@@ -190,8 +192,12 @@ state.socket.on("message:new", message => {
 }
 
 async function loadConversations() {
-  const data=await api("/api/conversations"); state.conversations=data.conversations;
+  const data=await api("/api/conversations"); 
+  state.conversations=data.conversations;
+
   renderConversations();
+  renderOnlinePeople();
+
   if(state.activeId && !state.conversations.some(c=>Number(c.id)===Number(state.activeId))) {
     state.activeId=null; state.activeUser=null; $("#messagePanel").classList.add("hidden"); $("#welcomePanel").classList.remove("hidden");
   }
@@ -248,6 +254,112 @@ function renderConversations() {
 function isUserOnline(userId) {
   return state.online.has(Number(userId));
 }
+
+function renderOnlinePeople() {
+  const container = $("#onlinePeople");
+  const count = $("#onlineCount");
+
+  if (!container || !count) return;
+
+  const people = new Map();
+
+  state.conversations.forEach(c => {
+    const user = c.other_user;
+
+    if (user && user.id && !c.is_group && isUserOnline(user.id)) {
+      people.set(Number(user.id), {
+        user,
+        conversationId: c.id
+      });
+    }
+  });
+
+  const onlinePeople = [...people.values()];
+  count.textContent = onlinePeople.length;
+
+  if (!onlinePeople.length) {
+    container.innerHTML =
+      '<div class="online-empty">No one online right now</div>';
+    return;
+  }
+
+  container.innerHTML = onlinePeople.map(({ user, conversationId }) => `
+    <div class="online-person" data-conversation-id="${conversationId}">
+      <div class="online-avatar-wrap">
+        <div class="online-avatar" style="display:flex;align-items:center;justify-content:center;color:white;font-weight:700;background:${escapeHtml(user.avatarColor || "#eee9ff")}">
+          ${escapeHtml(initials(user.displayName))}
+        </div>
+        <span class="online-dot"></span>
+      </div>
+      <span class="online-person-name">
+        ${escapeHtml(user.displayName.split(" ")[0])}
+      </span>
+    </div>
+  `).join("");
+
+  container.querySelectorAll(".online-person").forEach(person => {
+    person.addEventListener("click", () => {
+      openConversation(Number(person.dataset.conversationId));
+    });
+  });
+}
+
+function renderOnlinePeople() {
+  const container = $("#onlinePeople");
+  const count = $("#onlineCount");
+
+  if (!container || !count) return;
+
+  // Get unique people from existing conversations.
+  const people = new Map();
+
+  state.conversations.forEach(c => {
+    const user = c.other_user;
+
+    if (
+      user &&
+      user.id &&
+      !c.is_group &&
+      isUserOnline(user.id)
+    ) {
+      people.set(Number(user.id), {
+        user,
+        conversationId: c.id
+      });
+    }
+  });
+
+  const onlinePeople = [...people.values()];
+
+  count.textContent = onlinePeople.length;
+
+  if (!onlinePeople.length) {
+    container.innerHTML =
+      '<div class="online-empty">No one online right now</div>';
+    return;
+  }
+
+  container.innerHTML = onlinePeople.map(({ user, conversationId }) => `
+    <div class="online-person" data-conversation-id="${conversationId}" title="${escapeHtml(user.displayName)}">
+      <div class="online-avatar-wrap">
+        <div class="online-avatar" style="background:${escapeHtml(user.avatarColor || "#eee9ff")}; display:flex; align-items:center; justify-content:center; color:white; font-weight:700;">
+          ${escapeHtml(initials(user.displayName))}
+        </div>
+        <span class="online-dot"></span>
+      </div>
+      <span class="online-person-name">
+        ${escapeHtml(user.displayName.split(" ")[0])}
+      </span>
+    </div>
+  `).join("");
+
+  container.querySelectorAll(".online-person").forEach(person => {
+    person.addEventListener("click", () => {
+      openConversation(Number(person.dataset.conversationId));
+    });
+  });
+}
+
 
 function renderActiveHeader() {
   const user = state.activeUser;
@@ -342,22 +454,57 @@ function appendMessage(message) {
   el.dataset.messageId = message.id;
 
   el.innerHTML = `
-    <div class="message-bubble">${escapeHtml(message.body)}</div>
-    <span class="message-time">
+  ${message.reply_body ? `
+    <div class="reply-quote">
+      <strong>${escapeHtml(message.reply_sender_name || "User")}</strong>
+      <span>${escapeHtml(message.reply_body)}</span>
+    </div>
+  ` : ""}
+
+  <div class="message-bubble">${escapeHtml(message.body)}</div>
+
+  <button class="reply-message-btn" type="button">
+    Reply
+  </button>
+
+  <span class="message-time">
       ${mine ? "You" : escapeHtml(message.sender_name || "")} · ${time}
       ${receipt}
     </span>
   `;
 
   $("#messages").appendChild(el);
+  el.querySelector(".reply-message-btn").addEventListener("click", () => {
+  state.replyingTo = message;
+
+$("#replyPreviewName").textContent =
+  `Replying to ${message.sender_name || "User"}`;
+
+$("#replyPreviewText").textContent = message.body;
+
+$("#replyPreview").style.display = "flex";
+
+$("#messageInput").placeholder = "Write your reply...";
+
+$("#messageInput").focus();
+});
   $("#messages").scrollTop = $("#messages").scrollHeight;
 }
+
+$("#cancelReplyBtn").addEventListener("click", () => {
+  state.replyingTo = null;
+
+  $("#replyPreview").style.display = "none";
+  $("#messageInput").placeholder = "Write a message...";
+});
+
 $("#messageForm").addEventListener("submit",event=>{
   event.preventDefault(); const body=$("#messageInput").value.trim();
   if(!body||!state.activeId)return;
   state.socket.emit("message:send", {
   conversationId: state.activeId,
-  body
+  body,
+  replyToId: state.replyingTo?.id || null
 }, result => {
   if (!result?.ok) {
     toast(result?.error || "Message could not be sent.");
@@ -365,6 +512,9 @@ $("#messageForm").addEventListener("submit",event=>{
   }
 
   $("#messageInput").value = "";
+  state.replyingTo = null;
+$("#replyPreview").style.display = "none";
+$("#messageInput").placeholder = "Write a message...";
 });
 });
 function renderDetails() {

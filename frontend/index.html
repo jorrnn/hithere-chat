@@ -50,10 +50,37 @@
   <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button>
   <button class="icon-btn" id="logoutBtn" title="Sign out">↗</button>
 </div>
-      <div class="side-section-label">YOUR SPACE <button id="newChatBtn" class="new-chat" title="Start a conversation">+</button></div>
-      <div class="search-wrap"><span>⌕</span><input id="chatSearch" placeholder="Find a conversation"></div>
-      <div id="conversationList" class="conversation-list"><div class="empty-side">Your conversations will appear here.</div></div>
-      <div class="sidebar-bottom"><span class="status-pulse"></span><span>All caught up</span><span class="version">4SG</span></div>
+      <div class="side-section-label">
+        YOUR SPACE 
+        <button id="newChatBtn" class="new-chat" title="Start a conversation">+</button>
+      </div>
+      <div class="search-wrap">
+        <span>⌕</span>
+        <input id="chatSearch" placeholder="Find a conversation">
+      </div>
+      
+<!-- ONLINE PEOPLE -->
+<div class="online-people-section">
+  <div class="online-people-heading">
+    <span>ONLINE NOW</span>
+    <span id="onlineCount">0</span>
+  </div>
+
+  <div id="onlinePeople" class="online-people-list">
+    <div class="online-empty">No one online right now</div>
+  </div>
+</div>
+
+<!-- CONVERSATIONS -->
+<div id="conversationList" class="conversation-list">
+  <div class="empty-side">Your conversations will appear here.</div>
+</div>
+
+      <div class="sidebar-bottom">
+        <span class="status-pulse"></span>
+        <span>All caught up</span>
+        <span class="version">4SG</span>
+      </div>
     </aside>
 
     <section class="chat-area">
@@ -91,6 +118,15 @@
           <span class="composer-hint">Enter to send</span>
           <button class="send-btn" type="submit" aria-label="Send message">↑</button>
         </form>
+
+        <div id="replyPreview" class="reply-preview" style="display:none;">
+  <div>
+    <strong id="replyPreviewName"></strong>
+    <p id="replyPreviewText"></p>
+  </div>
+  <button type="button" id="cancelReplyBtn">×</button>
+</div>
+
       </section>
     </section>
 

@@ -523,29 +523,40 @@ app.get("/api/conversations/:id/messages", requireAuth, async (req, res) => {
   
 const result = await pool.query(`
   SELECT
-    m.id,
-    m.conversation_id,
-    m.body,
-    m.created_at,
-    m.sender_id,
-    u.display_name AS sender_name,
-    u.username AS sender_username,
-    COALESCE(r.recipient_count, 0)::int AS recipient_count,
-    COALESCE(r.delivered_count, 0)::int AS delivered_count,
-    COALESCE(r.read_count, 0)::int AS read_count
-  FROM messages m
-  JOIN users u ON u.id = m.sender_id
-  LEFT JOIN LATERAL (
-    SELECT
-      COUNT(*) AS recipient_count,
-      COUNT(*) FILTER (WHERE delivered_at IS NOT NULL) AS delivered_count,
-      COUNT(*) FILTER (WHERE read_at IS NOT NULL) AS read_count
-    FROM message_receipts
-    WHERE message_id = m.id
-  ) r ON TRUE
-  WHERE m.conversation_id = $1
-  ORDER BY m.created_at ASC
-  LIMIT 200
+  m.id,
+  m.conversation_id,
+  m.body,
+  m.created_at,
+  m.sender_id,
+  m.reply_to_id,
+  u.display_name AS sender_name,
+  u.username AS sender_username,
+
+  rm.body AS reply_body,
+  ru.display_name AS reply_sender_name,
+
+  COALESCE(r.recipient_count, 0)::int AS recipient_count,
+  COALESCE(r.delivered_count, 0)::int AS delivered_count,
+  COALESCE(r.read_count, 0)::int AS read_count
+
+FROM messages m
+JOIN users u ON u.id = m.sender_id
+
+LEFT JOIN messages rm ON rm.id = m.reply_to_id
+LEFT JOIN users ru ON ru.id = rm.sender_id
+
+LEFT JOIN LATERAL (
+  SELECT
+    COUNT(*) AS recipient_count,
+    COUNT(*) FILTER (WHERE delivered_at IS NOT NULL) AS delivered_count,
+    COUNT(*) FILTER (WHERE read_at IS NOT NULL) AS read_count
+  FROM message_receipts
+  WHERE message_id = m.id
+) r ON TRUE
+
+WHERE m.conversation_id = $1
+ORDER BY m.created_at ASC
+LIMIT 200
 `, [id]);
 
   res.json({ messages: result.rows });
@@ -600,9 +611,25 @@ socket.emit("presence:list", presenceList);
   try {
     const conversationId = Number(payload?.conversationId);
     const body = String(payload?.body || "").trim();
+    const replyToId = payload?.replyToId ? Number(payload.replyToId) : null;
 
     if (!Number.isInteger(conversationId) || !body || body.length > 4000)
       throw new Error("Messages must contain 1–4,000 characters.");
+
+    if (replyToId !== null) {
+  if (!Number.isInteger(replyToId) || replyToId <= 0) {
+    throw new Error("Invalid reply message.");
+  }
+
+  const originalMessage = await pool.query(
+    "SELECT id FROM messages WHERE id=$1 AND conversation_id=$2",
+    [replyToId, conversationId]
+  );
+
+  if (!originalMessage.rowCount) {
+    throw new Error("The message you are replying to was not found.");
+  }
+}
 
     const member = await pool.query(
       "SELECT 1 FROM conversation_members WHERE conversation_id=$1 AND user_id=$2",
@@ -613,10 +640,10 @@ socket.emit("presence:list", presenceList);
       throw new Error("You are not a member of this conversation.");
 
     const result = await pool.query(`
-      INSERT INTO messages (conversation_id, sender_id, body)
-      VALUES ($1, $2, $3)
-      RETURNING id, conversation_id, sender_id, body, created_at
-    `, [conversationId, userId, body]);
+  INSERT INTO messages (conversation_id, sender_id, body, reply_to_id)
+  VALUES ($1, $2, $3, $4)
+  RETURNING id, conversation_id, sender_id, body, created_at, reply_to_id
+`, [conversationId, userId, body, replyToId]);
 
     const message = result.rows[0];
 
@@ -627,6 +654,20 @@ socket.emit("presence:list", presenceList);
 
     message.sender_name = sender.rows[0].display_name;
     message.sender_username = sender.rows[0].username;
+
+    if (message.reply_to_id) {
+  const original = await pool.query(`
+    SELECT m.body, u.display_name AS sender_name
+    FROM messages m
+    JOIN users u ON u.id = m.sender_id
+    WHERE m.id = $1
+  `, [message.reply_to_id]);
+
+  if (original.rowCount) {
+    message.reply_body = original.rows[0].body;
+    message.reply_sender_name = original.rows[0].sender_name;
+  }
+}
 
     const members = await pool.query(
       `SELECT user_id
