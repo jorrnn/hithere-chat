@@ -133,6 +133,51 @@ state.socket.on("message:new", message => {
   }
 });
 
+
+state.socket.on("message:deleted", data => {
+  const messageElement = document.querySelector(
+    `[data-message-id="${data.messageId}"]`
+  );
+
+  if (data.deleteType === "me") {
+    if (messageElement) {
+      messageElement.remove();
+    }
+    return;
+  }
+
+  if (data.deleteType === "everyone") {
+    if (messageElement) {
+      const bubble = messageElement.querySelector(".message-bubble");
+
+      if (bubble) {
+        bubble.textContent = "This message was deleted";
+        bubble.style.fontStyle = "italic";
+        bubble.style.opacity = "0.7";
+      }
+
+      const actions = messageElement.querySelector(".message-actions");
+
+      if (actions) actions.remove();
+
+      const replyQuote = messageElement.querySelector(".reply-quote");
+
+      if (replyQuote) replyQuote.remove();
+    }
+
+    // Update the conversation preview.
+    const conversation = state.conversations.find(
+      c => Number(c.id) === Number(state.activeId)
+    );
+
+    if (conversation) {
+      conversation.last_message = "This message was deleted";
+      renderConversations();
+    }
+  }
+});
+
+
   state.socket.on("conversation:updated", () => {
     loadConversations();
   });
@@ -423,6 +468,7 @@ renderConversations();
 $("#messages").scrollTop = $("#messages").scrollHeight;
   $("#messageInput").focus();
 }
+
 function appendMessage(message) {
   if (Number(message.conversation_id) !== Number(state.activeId)) return;
   if (document.querySelector(`[data-message-id="${message.id}"]`)) return;
@@ -453,43 +499,192 @@ function appendMessage(message) {
   el.className = `message ${mine ? "mine" : ""}`;
   el.dataset.messageId = message.id;
 
+  const deleted = message.deleted_for_everyone;
+
   el.innerHTML = `
-  ${message.reply_body ? `
-    <div class="reply-quote">
-      <strong>${escapeHtml(message.reply_sender_name || "User")}</strong>
-      <span>${escapeHtml(message.reply_body)}</span>
-    </div>
-  ` : ""}
+    ${message.reply_body && !deleted ? `
+      <div class="reply-quote">
+        <strong>${escapeHtml(message.reply_sender_name || "User")}</strong>
+        <span>${escapeHtml(message.reply_body)}</span>
+      </div>
+    ` : ""}
 
-  <div class="message-bubble">${escapeHtml(message.body)}</div>
+    <div class="message-bubble">${deleted ? "This message was deleted" : escapeHtml(message.body)}</div>
 
-  <button class="reply-message-btn" type="button">
-    Reply
-  </button>
-
-  <span class="message-time">
+    <span class="message-time">
       ${mine ? "You" : escapeHtml(message.sender_name || "")} · ${time}
       ${receipt}
     </span>
   `;
 
   $("#messages").appendChild(el);
-  el.querySelector(".reply-message-btn").addEventListener("click", () => {
-  state.replyingTo = message;
 
-$("#replyPreviewName").textContent =
-  `Replying to ${message.sender_name || "User"}`;
+    let pressTimer;
 
-$("#replyPreviewText").textContent = message.body;
+  const messageBubble = el.querySelector(".message-bubble");
 
-$("#replyPreview").style.display = "flex";
+let startX = 0;
+let startY = 0;
+let isDragging = false;
 
-$("#messageInput").placeholder = "Write your reply...";
+function startReplyDrag(x, y) {
+  startX = x;
+  startY = y;
+  isDragging = true;
+}
 
-$("#messageInput").focus();
+function moveReplyDrag(x, y) {
+  if (!isDragging) return;
+
+  const distanceX = x - startX;
+  const distanceY = Math.abs(y - startY);
+
+  if (distanceX > 0 && distanceY < 50) {
+    messageBubble.style.transform =
+      `translateX(${Math.min(distanceX, 35)}px)`;
+  }
+}
+
+function finishReplyDrag(x, y) {
+  if (!isDragging) return;
+
+  isDragging = false;
+
+  const distanceX = x - startX;
+  const distanceY = Math.abs(y - startY);
+
+  messageBubble.style.transform = "";
+
+  if (distanceX > 70 && distanceY < 50) {
+    state.replyingTo = message;
+
+    $("#replyPreviewName").textContent =
+      `Replying to ${message.sender_name || "User"}`;
+
+    $("#replyPreviewText").textContent = message.body;
+    $("#replyPreview").style.display = "flex";
+    $("#messageInput").placeholder = "Write your reply...";
+    $("#messageInput").focus();
+  }
+}
+
+// Laptop mouse drag
+messageBubble.addEventListener("mousedown", (event) => {
+  if (event.button !== 0) return;
+  startReplyDrag(event.clientX, event.clientY);
 });
+
+document.addEventListener("mousemove", (event) => {
+  moveReplyDrag(event.clientX, event.clientY);
+});
+
+document.addEventListener("mouseup", (event) => {
+  finishReplyDrag(event.clientX, event.clientY);
+});
+
+// Phone swipe
+messageBubble.addEventListener("touchstart", (event) => {
+  const touch = event.changedTouches[0];
+  startReplyDrag(touch.clientX, touch.clientY);
+}, { passive: true });
+
+messageBubble.addEventListener("touchmove", (event) => {
+  const touch = event.changedTouches[0];
+  moveReplyDrag(touch.clientX, touch.clientY);
+}, { passive: true });
+
+messageBubble.addEventListener("touchend", (event) => {
+  const touch = event.changedTouches[0];
+  finishReplyDrag(touch.clientX, touch.clientY);
+});
+
+messageBubble.addEventListener("touchcancel", () => {
+  isDragging = false;
+  messageBubble.style.transform = "";
+});
+
   $("#messages").scrollTop = $("#messages").scrollHeight;
 }
+
+
+function showDeleteMenu(message) {
+  if (message.deleted_for_everyone) return;
+
+  const mine = Number(message.sender_id) === Number(state.user.id);
+  const menu = $("#messageContextMenu");
+
+  menu.style.display = "block";
+
+  const replyBtn = $("#replyContextBtn");
+  const deleteMeBtn = $("#deleteMeContextBtn");
+  const deleteEveryoneBtn = $("#deleteEveryoneContextBtn");
+
+  deleteEveryoneBtn.style.display = mine ? "block" : "none";
+
+  const messageElement = document.querySelector(
+    `[data-message-id="${message.id}"]`
+  );
+
+  const rect = messageElement.getBoundingClientRect();
+
+  menu.style.left = `${Math.max(10, Math.min(rect.left, window.innerWidth - 210))}px`;
+  menu.style.top = `${Math.min(rect.bottom + 5, window.innerHeight - 160)}px`;
+
+  replyBtn.onclick = () => {
+    state.replyingTo = message;
+
+    $("#replyPreviewName").textContent =
+      `Replying to ${message.sender_name || "User"}`;
+
+    $("#replyPreviewText").textContent = message.body;
+    $("#replyPreview").style.display = "flex";
+    $("#messageInput").placeholder = "Write your reply...";
+    $("#messageInput").focus();
+
+    menu.style.display = "none";
+  };
+
+  deleteMeBtn.onclick = () => {
+    menu.style.display = "none";
+    deleteMessage(message.id, "me");
+  };
+
+  deleteEveryoneBtn.onclick = () => {
+    menu.style.display = "none";
+    deleteMessage(message.id, "everyone");
+  };
+}
+
+document.addEventListener("pointerdown", (event) => {
+  const menu = $("#messageContextMenu");
+
+  if (
+    menu &&
+    !menu.contains(event.target) &&
+    !event.target.closest(".message-bubble")
+  ) {
+    menu.style.display = "none";
+  }
+});
+
+function deleteMessage(messageId, deleteType) {
+  state.socket.emit("message:delete", {
+    messageId,
+    deleteType
+  }, (result) => {
+    if (!result?.ok) {
+      toast(result?.error || "Could not delete message.");
+      return;
+    }
+
+    toast(
+      deleteType === "everyone"
+        ? "Message deleted for everyone."
+        : "Message deleted for you."
+    );
+  });
+}
+
 
 $("#cancelReplyBtn").addEventListener("click", () => {
   state.replyingTo = null;

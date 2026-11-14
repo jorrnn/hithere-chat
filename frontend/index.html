@@ -111,7 +111,19 @@
         <button class="primary-btn" id="welcomeNewChat">Start a conversation <span>→</span></button>
       </section>
       <section id="messagePanel" class="message-panel hidden">
+        <div id="messageContextMenu" class="message-context-menu">
+          <button type="button" id="replyContextBtn">Reply</button>
+          <button type="button" id="deleteMeContextBtn">Delete for me</button>
+          <button type="button" id="deleteEveryoneContextBtn">Delete for everyone</button>
+        </div>
         <div id="messages" class="messages"></div>
+        <div id="replyPreview" class="reply-preview" style="display:none;">
+  <div>
+    <strong id="replyPreviewName"></strong>
+    <p id="replyPreviewText"></p>
+  </div>
+  <button type="button" id="cancelReplyBtn">×</button>
+</div>
         <form id="messageForm" class="composer">
           <button type="button" class="composer-plus" title="Attachments coming later" aria-label="Attachments">＋</button>
           <input id="messageInput" maxlength="4000" placeholder="Write a message..." autocomplete="off">

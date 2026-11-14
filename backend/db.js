@@ -82,6 +82,20 @@ async function initDb() {
 
   await pool.query(`
   ALTER TABLE messages
+  ADD COLUMN IF NOT EXISTS deleted_for_everyone BOOLEAN NOT NULL DEFAULT FALSE;
+`);
+
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS message_deletions (
+    message_id BIGINT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (message_id, user_id)
+  );
+`);
+
+  await pool.query(`
+  ALTER TABLE messages
   ADD COLUMN IF NOT EXISTS reply_to_id BIGINT
   REFERENCES messages(id) ON DELETE SET NULL;
 `);

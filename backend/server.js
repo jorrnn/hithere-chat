@@ -523,41 +523,56 @@ app.get("/api/conversations/:id/messages", requireAuth, async (req, res) => {
   
 const result = await pool.query(`
   SELECT
-  m.id,
-  m.conversation_id,
-  m.body,
-  m.created_at,
-  m.sender_id,
-  m.reply_to_id,
-  u.display_name AS sender_name,
-  u.username AS sender_username,
+    m.id,
+    m.conversation_id,
+    m.body,
+    m.created_at,
+    m.sender_id,
+    m.reply_to_id,
+    m.deleted_for_everyone,
+    u.display_name AS sender_name,
+    u.username AS sender_username,
 
-  rm.body AS reply_body,
-  ru.display_name AS reply_sender_name,
+    rm.body AS reply_body,
+    ru.display_name AS reply_sender_name,
 
-  COALESCE(r.recipient_count, 0)::int AS recipient_count,
-  COALESCE(r.delivered_count, 0)::int AS delivered_count,
-  COALESCE(r.read_count, 0)::int AS read_count
+    COALESCE(r.recipient_count, 0)::int AS recipient_count,
+    COALESCE(r.delivered_count, 0)::int AS delivered_count,
+    COALESCE(r.read_count, 0)::int AS read_count,
 
-FROM messages m
-JOIN users u ON u.id = m.sender_id
+    EXISTS (
+      SELECT 1
+      FROM message_deletions md
+      WHERE md.message_id = m.id
+      AND md.user_id = $2
+    ) AS deleted_for_me
 
-LEFT JOIN messages rm ON rm.id = m.reply_to_id
-LEFT JOIN users ru ON ru.id = rm.sender_id
+  FROM messages m
+  JOIN users u ON u.id = m.sender_id
 
-LEFT JOIN LATERAL (
-  SELECT
-    COUNT(*) AS recipient_count,
-    COUNT(*) FILTER (WHERE delivered_at IS NOT NULL) AS delivered_count,
-    COUNT(*) FILTER (WHERE read_at IS NOT NULL) AS read_count
-  FROM message_receipts
-  WHERE message_id = m.id
-) r ON TRUE
+  LEFT JOIN messages rm ON rm.id = m.reply_to_id
+  LEFT JOIN users ru ON ru.id = rm.sender_id
 
-WHERE m.conversation_id = $1
-ORDER BY m.created_at ASC
-LIMIT 200
-`, [id]);
+  LEFT JOIN LATERAL (
+    SELECT
+      COUNT(*) AS recipient_count,
+      COUNT(*) FILTER (WHERE delivered_at IS NOT NULL) AS delivered_count,
+      COUNT(*) FILTER (WHERE read_at IS NOT NULL) AS read_count
+    FROM message_receipts
+    WHERE message_id = m.id
+  ) r ON TRUE
+
+  WHERE m.conversation_id = $1
+  AND NOT EXISTS (
+    SELECT 1
+    FROM message_deletions md
+    WHERE md.message_id = m.id
+    AND md.user_id = $2
+  )
+
+  ORDER BY m.created_at ASC
+  LIMIT 200
+`, [id, req.session.userId]);
 
   res.json({ messages: result.rows });
 });
@@ -698,6 +713,83 @@ socket.emit("presence:list", presenceList);
     if (callback) callback({ ok: false, error: err.message });
   }
 });
+
+  // DELETE MESSAGE
+  socket.on("message:delete", async (payload, callback) => {
+    try {
+      const messageId = Number(payload?.messageId);
+      const deleteType = payload?.deleteType;
+
+      if (!Number.isInteger(messageId) || messageId <= 0) {
+        throw new Error("Invalid message.");
+      }
+
+      if (!["me", "everyone"].includes(deleteType)) {
+        throw new Error("Invalid deletion option.");
+      }
+
+      const result = await pool.query(`
+        SELECT id, conversation_id, sender_id
+        FROM messages
+        WHERE id = $1
+      `, [messageId]);
+
+      if (!result.rowCount) {
+        throw new Error("Message not found.");
+      }
+
+      const message = result.rows[0];
+
+      const member = await pool.query(
+        `SELECT 1 FROM conversation_members
+         WHERE conversation_id = $1 AND user_id = $2`,
+        [message.conversation_id, userId]
+      );
+
+      if (!member.rowCount) {
+        throw new Error("You cannot delete this message.");
+      }
+
+      if (deleteType === "everyone") {
+        if (Number(message.sender_id) !== Number(userId)) {
+          throw new Error("You can only delete your own messages for everyone.");
+        }
+
+        await pool.query(`
+          UPDATE messages
+          SET deleted_for_everyone = TRUE,
+              body = 'This message was deleted'
+          WHERE id = $1
+        `, [messageId]);
+
+        io.to(`conversation:${message.conversation_id}`).emit(
+          "message:deleted",
+          {
+            messageId,
+            deleteType: "everyone",
+            body: "This message was deleted"
+          }
+        );
+
+      } else {
+        await pool.query(`
+          INSERT INTO message_deletions (message_id, user_id)
+          VALUES ($1, $2)
+          ON CONFLICT (message_id, user_id) DO NOTHING
+        `, [messageId, userId]);
+
+        socket.emit("message:deleted", {
+          messageId,
+          deleteType: "me"
+        });
+      }
+
+      if (callback) callback({ ok: true });
+
+    } catch (err) {
+      if (callback) callback({ ok: false, error: err.message });
+    }
+  });
 
   socket.on("message:delivered", async (payload) => {
   try {
