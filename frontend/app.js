@@ -582,6 +582,26 @@ document.addEventListener("mouseup", (event) => {
   finishReplyDrag(event.clientX, event.clientY);
 });
 
+let longPressTimer;
+
+messageBubble.addEventListener("touchstart", () => {
+  longPressTimer = setTimeout(() => {
+    showDeleteMenu(message);
+  }, 600);
+}, { passive: true });
+
+messageBubble.addEventListener("touchend", () => {
+  clearTimeout(longPressTimer);
+});
+
+messageBubble.addEventListener("touchmove", () => {
+  clearTimeout(longPressTimer);
+}, { passive: true });
+
+messageBubble.addEventListener("touchcancel", () => {
+  clearTimeout(longPressTimer);
+});
+
 // Phone swipe
 messageBubble.addEventListener("touchstart", (event) => {
   const touch = event.changedTouches[0];
